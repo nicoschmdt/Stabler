@@ -12,6 +12,15 @@
       <button class="button" :disabled="loading" @click="syncStables">Sync Stables</button>
       <button class="button" :disabled="loading" @click="doRequest">Pull and Apply</button>
     </div>
+    <v-overlay
+      :z-index="10"
+      :value="loading"
+    >
+      <spinning-logo
+        size="100%"
+        subtitle="Applying version..."
+      />
+    </v-overlay>
     <div class="description" v-if="!loading"> Last synced: {{ lastSynced }} </div>
   </div>
 </template>
