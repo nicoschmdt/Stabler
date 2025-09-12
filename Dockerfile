@@ -23,6 +23,7 @@ LABEL permissions='{\
         "8123/tcp": {}\
     },\
     "HostConfig": {\
+        "Binds":["/usr/blueos/extensions/stabler:/var/lib/stabler"],\
         "PortBindings": {\
             "8123/tcp": [\
             {\

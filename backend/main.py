@@ -1,20 +1,39 @@
 from robyn import Robyn, Request
-from version_service import execute_install, Endpoints, get_request
+from version_service import execute_install, get_stable_versions, sync_stables, get_last_updated_timestamp, validate_request
+from loguru import logger
+
+SERVICE_NAME = "Stabler"
 
 app = Robyn(__name__)
 
+logger.add(f"Starting {SERVICE_NAME}")
+
+@app.get("/stable-versions")
+async def get_versions():
+    stable_versions = await get_stable_versions()
+
+    return {"stables": stable_versions}
+
+
+@app.get("/sync")
+async def sync():
+    timestamp = await sync_stables()
+    return {"timestamp": timestamp}
+
+
+@app.get("/last-updated")
+async def get_last_updated():
+    timestamp = await get_last_updated_timestamp()
+    return {"timestamp": timestamp}
 
 @app.get("/download")
 async def download_stable_version(request: Request):
     try:
         version = request.query_params.get("version", None)
         
-        if version not in ["1.3.1", "1.4.2"]:
-            return {"error": "Invalid version"}
-
-        current_version_json = await get_request(Endpoints.CURRENT)
-        if current_version_json["tag"] == version:
-            return {"error": "Version requested is already installed"}
+        valid, message = validate_request(version)
+        if not valid:
+            return {"error": message}
 
         info = {
             "repository": "bluerobotics/blueos-core",
@@ -28,7 +47,6 @@ async def download_stable_version(request: Request):
             return {"error": "Failed to download and apply version"}
         
     except Exception as e:
-        print(f"Error: {e}")
         return {"error": f"Failed to process request: {str(e)}"}
 
 

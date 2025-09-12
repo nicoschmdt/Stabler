@@ -9,4 +9,5 @@ dependencies = [
     "uvloop",
     "requests",
     "aiohttp",
+    "loguru",
 ]

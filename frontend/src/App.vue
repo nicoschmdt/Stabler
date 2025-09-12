@@ -3,31 +3,42 @@
     <div class="title">Stabler</div>
 
     <div class="description">Select the stable version you want to download and apply:</div>
-    <div>
+    <div v-if="!loading">
       <select class="dropdown" v-model="selectedVersion">
         <option v-for="version in versions" :key="version" :value="version">{{ version }}</option>
       </select>
     </div>
-    <div>
+    <div v-if="!loading">
+      <button class="button" :disabled="loading" @click="syncStables">Sync Stables</button>
       <button class="button" :disabled="loading" @click="doRequest">Pull and Apply</button>
     </div>
-  </div>
-  <div v-if="loading">
-    <div>Applying version...</div>
+    <div class="description" v-if="!loading"> Last synced: {{ lastSynced }} </div>
   </div>
 </template>
 
 <script>
 import axios from 'axios'
+import SpinningLogo from './SpinningLogo.vue'
 
 export default {
   name: 'App',
+  components: {
+    SpinningLogo,
+  },
   data() {
     return {
-      versions: ['1.3.1', '1.4.2'],
-      selectedVersion: '1.4.2',
-      loading: false
+      versions: [],
+      selectedVersion: '',
+      loading: false,
+      lastSynced: ''
     }
+  },
+  async mounted() {
+    const response = await axios.get('/stable-versions')
+    this.versions = response.data.stables
+    this.selectedVersion = this.versions[0]
+    const lastSyncedResponse = await axios.get('/last-updated')
+    this.lastSynced = lastSyncedResponse.data.timestamp
   },
   methods: {
     async doRequest() {
@@ -37,13 +48,18 @@ export default {
           params: {
             version: this.selectedVersion
           }
-          // por um spinner aqui (ver como tá sendo feito no blueos)
         })
       } catch (error) {
         console.error('Error:', error)
       } finally {
         this.loading = false
       }
+    },
+    async syncStables() {
+      this.loading = true
+      const response = await axios.get('/sync')
+      this.lastSynced = response.data.timestamp
+      this.loading = false
     }
   }
 }
@@ -78,6 +94,7 @@ export default {
   border: none;
   border-radius: 5px;
   align-items: center;
+  margin-right: 10px;
 }
 
 .dropdown {
