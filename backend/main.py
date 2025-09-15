@@ -1,53 +1,47 @@
-from robyn import Robyn, Request
-from version_service import execute_install, get_stable_versions, sync_stables, get_last_updated_timestamp, validate_request
+"""
+Stabler is a service that allows you to download and apply stable versions of BlueOS.
+"""
+
 from loguru import logger
+from robyn import Request, Robyn
+
+from stabler import Stabler
 
 SERVICE_NAME = "Stabler"
 
 app = Robyn(__name__)
+stabler = Stabler()
 
 logger.add(f"Starting {SERVICE_NAME}")
 
+
 @app.get("/stable-versions")
 async def get_versions():
-    stable_versions = await get_stable_versions()
+    stable_versions = await stabler.get_stable_versions()
 
     return {"stables": stable_versions}
 
 
 @app.get("/sync")
 async def sync():
-    timestamp = await sync_stables()
+    timestamp = await stabler.update_stables()
     return {"timestamp": timestamp}
 
 
 @app.get("/last-updated")
 async def get_last_updated():
-    timestamp = await get_last_updated_timestamp()
+    timestamp = await stabler.get_timestamp()
     return {"timestamp": timestamp}
+
 
 @app.get("/download")
 async def download_stable_version(request: Request):
-    try:
-        version = request.query_params.get("version", None)
-        
-        valid, message = validate_request(version)
-        if not valid:
-            return {"error": message}
+    version = request.query_params.get("version", None)
 
-        info = {
-            "repository": "bluerobotics/blueos-core",
-            "tag": version,
-        }
-
-        status = await execute_install(info, version)
-        if status:
-            return {"status": "success", "message": f"Downloaded and applied version {version}"}
-        else:
-            return {"error": "Failed to download and apply version"}
-        
-    except Exception as e:
-        return {"error": f"Failed to process request: {str(e)}"}
+    valid, message = await stabler.pull_and_apply(version)
+    if not valid:
+        return {"status": 400, "message": message}
+    return {"status": 200, "message": f"Downloaded and applied version {version}"}
 
 
 def main():
