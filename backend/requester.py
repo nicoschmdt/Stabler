@@ -4,15 +4,15 @@ import aiohttp
 from aiohttp.client_exceptions import ServerDisconnectedError
 
 URL = os.getenv("BLUEOS_URL") or "http://host.docker.internal"
+GITHUB = "https://api.github.com/repos/bluerobotics/BlueOS/releases?per_page=100"
 
 
-class VersionChooserHelper:
-    BASE = f"{URL}/version-chooser/v1.0/version"
+class Requester:
+    VERSIONCHOOSER = f"{URL}/version-chooser/v1.0/version"
 
-    CURRENT = f"{BASE}/current"
-    AVAILABLE_LOCAL = f"{BASE}/available/local"
-    AVAILABLE_REMOTE = f"{BASE}/available/bluerobotics/blueos-core"
-    PULL = f"{BASE}/pull/"
+    CURRENT = f"{VERSIONCHOOSER}/current"
+    AVAILABLE_LOCAL = f"{VERSIONCHOOSER}/available/local"
+    PULL = f"{VERSIONCHOOSER}/pull/"
 
     async def post_request(self, endpoint: str, info: dict) -> None:
         try:
@@ -25,12 +25,15 @@ class VersionChooserHelper:
     async def get_request(self, endpoint: str) -> dict:
         async with aiohttp.ClientSession() as session:
             async with session.get(endpoint) as response:
-                return await response.json()
+                if response.status == 200:
+                    return await response.json()
+                raise ValueError(
+                    f"HTTP {response.status}: Failed to get request from {endpoint}"
+                )
 
     @classmethod
-    async def available_versions(cls) -> dict:
-        response = await cls.get_request(cls, cls.AVAILABLE_REMOTE)
-        return response["remote"] + response["local"]
+    async def get_versions(cls) -> list[dict]:
+        return await cls.get_request(cls, GITHUB)
 
     @classmethod
     async def local_versions(cls) -> dict:

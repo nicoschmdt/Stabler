@@ -7,7 +7,7 @@ from loguru import logger
 from semver import Version
 
 from storage import Storage
-from version_service import VersionChooserHelper
+from requester import Requester
 
 STABLE_PATTERN = re.compile(r"\d\.\d\.\d$")
 
@@ -41,24 +41,24 @@ class Stabler:
         return updated_timestamp
 
     async def get_latest_stables(self) -> list[str]:
-        available_versions = await VersionChooserHelper.available_versions()
-        return sorted(filter_stables(available_versions), reverse=True)
+        versions = await Requester.get_versions()
+        return sorted(filter_stables(versions, "tag_name"), reverse=True)
 
     async def requires_download(self, version: str) -> bool:
-        local_images = await VersionChooserHelper.local_versions()
-        return version not in filter_stables(local_images)
+        local_images = await Requester.local_versions()
+        return version not in filter_stables(local_images, "tag")
 
     async def install(self, info: dict, version: str) -> bool:
         if await self.requires_download(version):
             logger.info(f"Version {version} is not in the local images, pulling it...")
-            await VersionChooserHelper.pull_version(info)
+            await Requester.pull_version(info)
             await asyncio.sleep(10)
 
             if await self.requires_download(version):
                 return False
 
         logger.info(f"Changing version to {version}")
-        await VersionChooserHelper.change_version(info)
+        await Requester.change_version(info)
         await asyncio.sleep(10)
         logger.info(f"Checking if version is expected: {version}")
         return await self.validate(version)
@@ -66,11 +66,9 @@ class Stabler:
     async def validate(self, version: str, delay: int = 20) -> bool:
         while True:
             try:
-                current_version = await VersionChooserHelper.current_version()
-                if current_version == version:
-                    return True
-                return False
-            except ClientConnectorError:
+                current_version = await Requester.current_version()
+                return current_version == version
+            except (ClientConnectorError, ValueError):
                 await asyncio.sleep(delay)
             except Exception:
                 return False
@@ -80,7 +78,7 @@ class Stabler:
             if version not in await self.get_stables():
                 return False, "Invalid version"
 
-            current_version = await VersionChooserHelper.current_version()
+            current_version = await Requester.current_version()
             if current_version == version:
                 return False, "Version requested is already installed"
 
@@ -99,23 +97,33 @@ class Stabler:
 
     async def get_stable_versions(self) -> list[str]:
         stables = await self.get_stables()
-        current = await VersionChooserHelper.current_version()
+        current_str = await Requester.current_version()
 
-        if VERSION_PATTERN.match(current):
-            enabled_versions = [
-                stable for stable in stables if semver.compare(stable, current) >= 0
-            ]
-            if enabled_versions:
-                return enabled_versions
-        return stables[:4]
+        try:
+            current = Version.parse(current_str)
+
+            enabled_versions = []
+            for stable_str in stables:
+                stable = Version.parse(stable_str)
+                if current.is_compatible(stable) and (
+                    current.prerelease is not None or stable >= current
+                ):
+                    enabled_versions.append(stable_str)
+
+            return enabled_versions
+        except ValueError:
+            return stables[:4]
 
 
-def filter_stables(stables: list[str]) -> list[str]:
+def filter_stables(stables: list[str], filter: str) -> list[str]:
     return list(
         {
-            version["tag"]
+            version[filter]
             for version in stables
-            if STABLE_PATTERN.match(version["tag"])
-            and version["repository"] == "bluerobotics/blueos-core"
+            if STABLE_PATTERN.match(version[filter])
+            and (
+                filter == "tag_name"
+                or version.get("repository", "") == "bluerobotics/blueos-core"
+            )
         }
     )
